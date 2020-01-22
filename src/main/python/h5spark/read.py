@@ -35,7 +35,7 @@ def readH5Multi(sc, file_list_or_txt_file, partitions=None):
     if partitions:
         rdd = rdd.repartition(partitions)
     
-    ret = rdd.map(lambda (f_path,dataset): (os.path.abspath(os.path.expandvars(os.path.expanduser(f_path))), dataset)).flatMap(readones)
+    ret = rdd.map(lambda f_path,dataset: (os.path.abspath(os.path.expandvars(os.path.expanduser(f_path))), dataset)).flatMap(readones)
     return ret
 
 def readH5SingleChunked(sc, filename_dataset_tuple, partitions):
@@ -43,10 +43,10 @@ def readH5SingleChunked(sc, filename_dataset_tuple, partitions):
 	filename, dataset = filename_dataset_tuple
 	rows = h5py.File(filename)[dataset].shape[0]
 	if not partitions:
-		partitions = rows / 50
+		partitions = int(rows / 50)
 	if partitions > rows:
 		partitions = rows
-	step = rows / partitions
+	step = int(rows / partitions)
 	rdd = sc.range(0, rows, step)\
 		.sortBy(lambda x: x, numPartitions=partitions)\
 		.flatMap(lambda x: readonep(filename,dataset,x,step))
@@ -54,12 +54,12 @@ def readH5SingleChunked(sc, filename_dataset_tuple, partitions):
 
 def h5read_irow(sc,file_list_or_txt_file, mode='multi', partitions=None):
     rdd = h5read(sc, file_list_or_txt_file,mode, partitions)
-    indexed_rows = rdd.zipWithIndex().map(lambda (v,k): (k,v))
+    indexed_rows = rdd.zipWithIndex().map(lambda v,k: (k,v))
     return indexed_rows
 	
 def h5read_imat(sc, file_list_or_txt_file, mode='multi', partitions=None):
     rdd = h5read(sc, file_list_or_txt_file,mode, partitions)
-    indexed_rows = rdd.zipWithIndex().map(lambda (v,k): (k,v))
+    indexed_rows = rdd.zipWithIndex().map(lambda v,k: (k,v))
     return IndexedRowMatrix(indexed_rows)
 
 #read one dataset/file each time. 
@@ -69,8 +69,8 @@ def readones(filename_dataname_tuple):
         f=h5py.File(filename,'r')
         d=f[dataname]
         a=list(d[:])
-     except Exception, e:
-        print "ioerror:%s"%e, filename
+     except Exception as e:
+        print (e, filename)
      else:
           f.close()
           return a
@@ -81,12 +81,12 @@ def readonep(filename, dset_name, i1, chunk_size):
 		f=h5py.File(filename,'r')
 		d = f[dset_name]
 		if i1 + chunk_size < d.shape[0]:
-			chunk = d[i1:i1+chunk_size,:]
+			chunk = d[i1:i1+chunk_size:]
 		else:
-			chunk = d[i1:d.shape[0],:]
+			chunk = d[i1:d.shape[0]:]
 		return list(chunk[:])
-	except Exception, e:
-		print "ioerror:%s"%e, filename
+	except Exception as e:
+		print (e, filename, dset_name, i1, chunk_size)
 	finally:
 		pass
 		f.close()
